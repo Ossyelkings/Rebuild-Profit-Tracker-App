@@ -222,6 +222,41 @@ export async function createCosts(vehicleId: string, costs: Cost[]): Promise<voi
   }
 }
 
+// Create a single cost and return the inserted row (mapped to app Cost shape)
+export async function createCost(vehicleId: string, cost: Cost): Promise<Cost> {
+  const costData = {
+    vehicle_id: vehicleId,
+    category: cost.category,
+    description: cost.description,
+    supplier: cost.supplier || null,
+    invoice_number: cost.invoiceNumber || null,
+    date: cost.date,
+    amount: cost.amount,
+  } as any;
+
+  const { data, error } = await supabase
+    .from('costs')
+    .insert(costData)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error creating cost:', error);
+    throw error;
+  }
+
+  // Map DB row to app Cost type
+  return {
+    id: data.id,
+    category: data.category,
+    description: data.description,
+    supplier: data.supplier || undefined,
+    invoiceNumber: data.invoice_number || undefined,
+    date: data.date,
+    amount: data.amount,
+  } as Cost;
+}
+
 // Update cost
 export async function updateCost(costId: string, updates: Partial<Cost>): Promise<void> {
   const { error } = await supabase

@@ -9,6 +9,7 @@ import { PhotoGallery } from './PhotoGallery';
 import { VehicleTimeline } from './VehicleTimeline';
 import { ActivityLog } from './ActivityLog';
 import { RepairDuration } from './RepairDuration';
+import { createCost, getVehicle, updateCost, deleteCost } from '../../utils/supabase/database';
 
 interface VehicleDetailProps {
   vehicle: Vehicle;
@@ -31,7 +32,12 @@ export function VehicleDetail({ vehicle, onBack, onUpdateVehicle, onDeleteVehicl
   const roi = calculateROI(vehicle);
   const totalCosts = calculateTotalCosts(vehicle);
 
-  const handleDeleteCost = (costId: string) => {
+  const handleDeleteCost = async (costId: string) => {
+    try {
+      await deleteCost(costId);
+    } catch (err) {
+      console.error('Error deleting cost:', err);
+    }
     const updatedVehicle = {
       ...vehicle,
       costs: vehicle.costs.filter(c => c.id !== costId)
@@ -757,14 +763,35 @@ export function VehicleDetail({ vehicle, onBack, onUpdateVehicle, onDeleteVehicl
         <AddCostModal
           vehicle={vehicle}
           onClose={() => setIsAddingCost(false)}
-          onSave={(cost) => {
-            const updatedVehicle = {
-              ...vehicle,
-              costs: [...vehicle.costs, cost]
-            };
-            onUpdateVehicle(updatedVehicle);
-            setIsAddingCost(false);
-          }}
+          onSave={async (cost) => {
+                try {
+                  // Persist cost to database
+                  const inserted = await createCost(vehicle.id, cost);
+
+                  // Refresh vehicle from database to get consistent state (including costs)
+                  const refreshed = await getVehicle(vehicle.id);
+                  if (refreshed) {
+                    onUpdateVehicle(refreshed);
+                  } else {
+                    // Fallback: append inserted cost locally
+                    const updatedVehicle = {
+                      ...vehicle,
+                      costs: [...vehicle.costs, inserted]
+                    };
+                    onUpdateVehicle(updatedVehicle);
+                  }
+                } catch (err) {
+                  console.error('Error adding cost:', err);
+                  // Still update locally for optimistic UI
+                  const updatedVehicle = {
+                    ...vehicle,
+                    costs: [...vehicle.costs, cost]
+                  };
+                  onUpdateVehicle(updatedVehicle);
+                } finally {
+                  setIsAddingCost(false);
+                }
+              }}
         />
       )}
 
@@ -785,7 +812,12 @@ export function VehicleDetail({ vehicle, onBack, onUpdateVehicle, onDeleteVehicl
         <EditCostModal
           cost={editingCost}
           onClose={() => setEditingCost(null)}
-          onSave={(updatedCost) => {
+          onSave={async (updatedCost) => {
+            try {
+              await updateCost(updatedCost.id, updatedCost);
+            } catch (err) {
+              console.error('Error updating cost:', err);
+            }
             const updatedVehicle = {
               ...vehicle,
               costs: vehicle.costs.map(c => c.id === updatedCost.id ? updatedCost : c)
